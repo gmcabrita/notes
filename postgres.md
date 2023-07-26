@@ -94,19 +94,33 @@ WHERE (now() - pg_stat_activity.query_start) > interval '1 minutes'
   AND state = 'active';
 ```
 
-### Blockers of queries
+### Blockers of queries (ALTER TABLE)
 
 ```sql
 SELECT blockers.pid,
        blockers.usename,
        blockers.query_start,
        blockers.query
-FROM pg_stat_Activity blockers
+FROM pg_stat_activity blockers
 INNER JOIN
   (SELECT pg_blocking_pids(pid) blocking_pids
-   FROM pg_stat_Activity
+   FROM pg_stat_activity
    WHERE pid != pg_backend_pid()
      AND query LIKE 'ALTER TABLE%' ) my_query ON blockers.pid = ANY(my_query.blocking_pids);
+```
+
+### Blockers of queries (blocked query + blocking query)
+
+```sql
+SELECT a1.pid,
+       a1.usename,
+       (now() - a1.query_start) AS running_time,
+       pg_blocking_pids(a1.pid) AS blocked_by,
+       a1.query AS blocked_query,
+       a2.query AS blocking_query
+FROM pg_stat_activity AS a1
+INNER JOIN pg_stat_activity AS a2 ON (a2.pid = (pg_blocking_pids(a1.pid)::integer[])[1])
+WHERE cardinality(pg_blocking_pids(a1.pid)) > 0;
 ```
 
 ### Kill query
