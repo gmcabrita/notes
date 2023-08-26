@@ -16,6 +16,11 @@
 - https://github.com/reorg/pg_repack
 - https://github.com/VADOSWARE/pg_idkit
 
+## Tooling
+
+- [Explore what commands issue which kinds of locks](https://pglocks.org/)
+- https://github.com/AdmTal/PostgreSQL-Query-Lock-Explainer
+
 ## Tricks
 
 ### Bulk update
