@@ -6,7 +6,7 @@
 - https://wiki.postgresql.org/wiki/Don't_Do_This
 - [Checks for potentially unsafe migrations](https://github.com/ankane/strong_migrations#checks)
 - https://www.crunchydata.com/postgres-tips
-- Avoid avoid using nested transactions and `SELECT FOR SHARE`
+- Avoid using nested transactions and `SELECT FOR SHARE`
   - [Notes on some PostgreSQL implementation details](https://buttondown.email/nelhage/archive/notes-on-some-postgresql-implementation-details/)
 - [Partitioning](https://brandur.org/fragments/postgres-partitioning-2022)
 - [Safely renaming a table](https://brandur.org/fragments/postgres-table-rename)
