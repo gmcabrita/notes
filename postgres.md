@@ -289,3 +289,9 @@ ORDER BY
     idstat.idx_scan DESC,
     pg_relation_size(indexrelid) DESC;
 ```
+
+### [Check ongoing usage creation](https://www.postgresql.org/docs/current/progress-reporting.html#CREATE-INDEX-PROGRESS-REPORTING)https://www.postgresql.org/docs/current/progress-reporting.html#CREATE-INDEX-PROGRESS-REPORTING
+
+```sql
+select * from pg_stat_progress_create_index;
+```
