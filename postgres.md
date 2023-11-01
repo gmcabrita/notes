@@ -10,6 +10,7 @@
   - [Notes on some PostgreSQL implementation details](https://buttondown.email/nelhage/archive/notes-on-some-postgresql-implementation-details/)
 - [Partitioning](https://brandur.org/fragments/postgres-partitioning-2022)
 - [Safely renaming a table](https://brandur.org/fragments/postgres-table-rename)
+- [Notes on Postgres WAL LSNs](https://github.com/superfly/fly_postgres_elixir/blob/88b1bf843c405e02666450e5d2e2c55f940a28e1/DEV_NOTES.md#postgres-features)
 
 ## Extensions
 
