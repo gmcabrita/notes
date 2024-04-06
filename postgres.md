@@ -1,31 +1,63 @@
 # Postgres
-
-## Best practices
-
-- https://wiki.postgresql.org/wiki/Lock_Monitoring
-- https://wiki.postgresql.org/wiki/Don't_Do_This
-- [Checks for potentially unsafe migrations](https://github.com/ankane/strong_migrations#checks)
-- https://www.crunchydata.com/postgres-tips
-- Avoid using nested transactions and `SELECT FOR SHARE`
-  - [Notes on some PostgreSQL implementation details](https://buttondown.email/nelhage/archive/notes-on-some-postgresql-implementation-details/)
-- [Partitioning](https://brandur.org/fragments/postgres-partitioning-2022)
-- [Safely renaming a table](https://brandur.org/fragments/postgres-table-rename)
-- [Notes on Postgres WAL LSNs](https://github.com/superfly/fly_postgres_elixir/blob/88b1bf843c405e02666450e5d2e2c55f940a28e1/DEV_NOTES.md#postgres-features)
-
+## Best practices / useful blog posts
+* https://pglocks.org/
+* https://github.com/AdmTal/PostgreSQL-Query-Lock-Explainer
+* https://wiki.postgresql.org/wiki/Lock_Monitoring
+* https://wiki.postgresql.org/wiki/Don't_Do_This
+* [Checks for potentially unsafe migrations](https://github.com/ankane/strong_migrations#checks)
+* https://www.crunchydata.com/postgres-tips
+* Avoid using nested transactions and SELECT FOR SHARE
+  * [Notes on some PostgreSQL implementation details](https://buttondown.email/nelhage/archive/notes-on-some-postgresql-implementation-details/)
+* [Partitioning](https://brandur.org/fragments/postgres-partitioning-2022)
+* [Safely renaming a table](https://brandur.org/fragments/postgres-table-rename)
+* [Notes on Postgres WAL LSNs](https://github.com/superfly/fly_postgres_elixir/blob/88b1bf843c405e02666450e5d2e2c55f940a28e1/DEV_NOTES.md#postgres-features)
+* https://gitlab.com/postgres-ai/postgresql-consulting/postgres-howtos
+* https://rachbelaid.com/introduction-to-postgres-physical-storage/
+* Set a lower `fillfactor` for tables which receive a lot of `UPDATE` operations
+  * See also: https://www.crunchydata.com/blog/postgres-performance-boost-hot-updates-and-fill-factor#fill-factor
+    * A fill factor of 70%, 80% or 90% provides a good tradeoff to hit more HOT updates at the cost of some extra storage
+    * Stats should probably be reset after fill factors are tweaked to better keep track of the percentage of HOT updates going forward
+* Consider using `plan_cache_mode = force_custom_plan` to prevent Postgres from caching bad plans
+  * Elixir specific(?): You may also set `prepare: :unnamed` at the connection level so that every prepared statement using that connection will be unnamed
+* Configure `random_page_cost` to a better value (e.g. 1.1) if using SSDs
+  * https://www.postgresql.org/docs/current/runtime-config-query.html#GUC-RANDOM-PAGE-COST
 ## Extensions
-
-- https://github.com/reorg/pg_repack
-- https://github.com/VADOSWARE/pg_idkit
-
+* https://github.com/reorg/pg_repack
+* https://github.com/VADOSWARE/pg_idkit
 ## Tooling
-
-- [Explore what commands issue which kinds of locks](https://pglocks.org/)
-- https://github.com/AdmTal/PostgreSQL-Query-Lock-Explainer
-
+* [Explore what commands issue which kinds of locks](https://pglocks.org/)
+* https://leontrolski.github.io/pglockpy.html
+  * https://github.com/leontrolski/pglockpy/tree/eda985ff87dbc8c30197e190aa1d8af777f8d349
+  * https://github.com/leontrolski/leontrolski.github.io/blob/2d05dcb52b3b90f70a4a3ef9f2cf178b94440cf8/pglockpy.html
+* https://github.com/AdmTal/PostgreSQL-Query-Lock-Explainer
+* https://github.com/NikolayS/postgres_dba
 ## Tricks
-
+### Insert sample data
+```sql
+DO $$
+  BEGIN LOOP
+    INSERT INTO http_request (
+      site_id, ingest_time, url, request_country,
+      ip_address, status_code, response_time_msec
+    ) VALUES (
+      trunc(random()*32), clock_timestamp(),
+      concat('[http://example.com](https://t.co/arRaQ8EOz0)', md5(random()::text)),
+      ('{China,India,USA,Indonesia}'::text[])[ceil(random()*4)],
+      concat(
+        trunc(random()*250 + 2), '.',
+        trunc(random()*250 + 2), '.',
+        trunc(random()*250 + 2), '.',
+        trunc(random()*250 + 2)
+      )::inet,
+      ('{200,404}'::int[])[ceil(random()*2)],
+      5+trunc(random()*150)
+    );
+    COMMIT;
+    PERFORM pg_sleep(random() * 0.05);
+  END LOOP;
+END $$;
+```
 ### Bulk update
-
 ```sql
 UPDATE relation SET foo = bulk_update.foo
         FROM (
@@ -37,9 +69,7 @@ UPDATE relation SET foo = bulk_update.foo
         ) AS bulk_update
         WHERE relation.id = bulk_update.id;
 ```
-
 ### Conditional insert
-
 ```sql
 INSERT INTO possible_problematic_domains (domain, created_at, updated_at)
 SELECT $1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
@@ -61,11 +91,8 @@ WHERE EXISTS (
 ON CONFLICT (domain) DO NOTHING
 RETURNING id;
 ```
-
 ## Snippets
-
 ### Query execution times
-
 ```sql
 SELECT round(total_exec_time*1000)/1000 AS total_exec_time,
        round(total_plan_time*1000)/1000 AS total_plan_time,
@@ -84,9 +111,7 @@ FROM pg_stat_statements
 ORDER BY mean_exec_time DESC
 LIMIT 10;
 ```
-
 ### Check long running queries
-
 ```sql
 SELECT pid,
        now() - pg_stat_activity.query_start AS duration,
@@ -99,9 +124,7 @@ FROM pg_stat_activity
 WHERE (now() - pg_stat_activity.query_start) > interval '1 minutes'
   AND state = 'active';
 ```
-
 ### Blockers of queries (ALTER TABLE)
-
 ```sql
 SELECT blockers.pid,
        blockers.usename,
@@ -114,9 +137,7 @@ INNER JOIN
    WHERE pid != pg_backend_pid()
      AND query LIKE 'ALTER TABLE%' ) my_query ON blockers.pid = ANY(my_query.blocking_pids);
 ```
-
 ### Blockers of queries (blocked query + blocking query)
-
 ```sql
 SELECT a1.pid,
        a1.usename,
@@ -128,19 +149,12 @@ FROM pg_stat_activity AS a1
 INNER JOIN pg_stat_activity AS a2 ON (a2.pid = (pg_blocking_pids(a1.pid)::integer[])[1])
 WHERE cardinality(pg_blocking_pids(a1.pid)) > 0;
 ```
-
 ### Kill query
-
 ```sql
 SELECT pg_cancel_backend(pid);
-```
-
-```sql
 SELECT pg_terminate_backend(pid);
 ```
-
-#### Kill all autovacuums
-
+### Kill all autovacuums
 ```sql
 SELECT pg_terminate_backend(pid),
        query,
@@ -148,9 +162,7 @@ SELECT pg_terminate_backend(pid),
 FROM pg_stat_activity
 WHERE query ilike 'autovacuum:%';
 ```
-
 ### Check ongoing vacuums
-
 ```sql
 SELECT p.pid,
        now() - a.xact_start AS duration,
@@ -175,17 +187,13 @@ FROM pg_stat_progress_vacuum p
 JOIN pg_stat_activity a USING (pid)
 ORDER BY now() - a.xact_start DESC;
 ```
-
 ### Estimate row count
-
 ```sql
 SELECT reltuples::numeric AS estimate_count
 FROM pg_class
 WHERE relname = 'table_name';
 ```
-
 ### Estimate query row count
-
 ```sql
 CREATE FUNCTION row_estimator(query text) RETURNS bigint LANGUAGE PLPGSQL AS $$DECLARE
    plan jsonb;
@@ -195,9 +203,7 @@ BEGIN
    RETURN (plan->0->'Plan'->>'Plan Rows')::bigint;
 END;$$;
 ```
-
 ### Check table sizes
-
 ```sql
 SELECT nspname || '.' || relname AS "relation",
        pg_size_pretty(pg_total_relation_size(C.oid)) AS "total_size"
@@ -210,15 +216,11 @@ WHERE nspname NOT IN ('pg_catalog',
 ORDER BY pg_total_relation_size(C.oid) DESC
 LIMIT 40;
 ```
-
 ### Check table size
-
 ```sql
 SELECT pg_size_pretty(pg_relation_size('table_name'));
 ```
-
 ### Check unused indexes
-
 ```sql
 SELECT schemaname || '.' || relname AS TABLE,
        indexrelname AS INDEX,
@@ -232,9 +234,7 @@ WHERE NOT indisunique
 ORDER BY pg_relation_size(i.indexrelid) / nullif(idx_scan, 0) DESC NULLS FIRST,
          pg_relation_size(i.indexrelid) DESC;
 ```
-
 ### Check which tables are aging
-
 ```sql
 SELECT c.oid::regclass,
        age(c.relfrozenxid),
@@ -248,20 +248,15 @@ WHERE relkind IN ('r',
 ORDER BY 2 DESC
 LIMIT 20;
 ```
-
 ### Connection counts
-
 ```sql
 SELECT count(*),
        state
 FROM pg_stat_activity
 GROUP BY state;
 ```
-
 ### Check for index usage
-
 ```sql
-
 SELECT
     idstat.relname AS TABLE_NAME,
     indexrelname AS index_name,
@@ -290,17 +285,38 @@ ORDER BY
     idstat.idx_scan DESC,
     pg_relation_size(indexrelid) DESC;
 ```
-
 ### Check ongoing usage creation
-
-See also: https://www.postgresql.org/docs/current/progress-reporting.html#CREATE-INDEX-PROGRESS-REPORTING
-
 ```sql
-select * from pg_stat_progress_create_index;
+SELECT now(),
+       query_start AS started_at,
+       now() - query_start AS query_duration,
+       format('[%s] %s', a.pid, a.query) AS pid_and_query,
+       index_relid::regclass AS index_name,
+       relid::regclass AS TABLE_NAME,
+       (pg_size_pretty(pg_relation_size(relid))) AS table_size,
+       nullif(wait_event_type, '') || ': ' || wait_event AS wait_type_and_event,
+       phase,
+       format('%s (%s of %s)', coalesce((round(100 * blocks_done::numeric / nullif(blocks_total, 0), 2))::text || '%', 'N/A'), coalesce(blocks_done::text, '?'), coalesce(blocks_total::text, '?')) AS blocks_progress,
+       format('%s (%s of %s)', coalesce((round(100 * tuples_done::numeric / nullif(tuples_total, 0), 2))::text || '%', 'N/A'), coalesce(tuples_done::text, '?'), coalesce(tuples_total::text, '?')) AS tuples_progress,
+       current_locker_pid,
+
+  (SELECT nullif(left(query, 150), '') || '...'
+   FROM pg_stat_activity a
+   WHERE a.pid = current_locker_pid) AS current_locker_query,
+       format('%s (%s of %s)', coalesce((round(100 * lockers_done::numeric / nullif(lockers_total, 0), 2))::text || '%', 'N/A'), coalesce(lockers_done::text, '?'), coalesce(lockers_total::text, '?')) AS lockers_progress,
+       format('%s (%s of %s)', coalesce((round(100 * partitions_done::numeric / nullif(partitions_total, 0), 2))::text || '%', 'N/A'), coalesce(partitions_done::text, '?'), coalesce(partitions_total::text, '?')) AS partitions_progress,
+
+  (SELECT format('%s (%s of %s)', coalesce((round(100 * n_dead_tup::numeric / nullif(reltuples::numeric, 0), 2))::text || '%', 'N/A'), coalesce(n_dead_tup::text, '?'), coalesce(reltuples::int8::text, '?'))
+   FROM pg_stat_all_tables t,
+        pg_class tc
+   WHERE t.relid = p.relid
+     AND tc.oid = p.relid ) AS table_dead_tuples
+FROM pg_stat_progress_create_index p
+LEFT JOIN pg_stat_activity a ON a.pid = p.pid
+ORDER BY p.index_relid;
 ```
-
+See also: https://www.postgresql.org/docs/current/progress-reporting.html\#CREATE-INDEX-PROGRESS-REPORTING
 ### Show Analyze / Vacuum Statistics
-
 ```sql
 WITH raw_data AS (
   SELECT
@@ -352,4 +368,53 @@ SELECT
 FROM
   data
 ORDER BY a_percent DESC;
+```
+### Check table statistics
+```sql
+select * from pg_stats pgs where pgs.tablename = '?';
+```
+### Prepared statements for psql operations
+```SQL
+PREPARE add_flag_to_team(text, uuid) AS INSERT INTO flag_team (
+    flag_id,
+    team_id
+) VALUES (
+    (SELECT id FROM flag WHERE name = $1),
+    $2
+) ON CONFLICT DO NOTHING;
+
+EXECUTE add_flag_to_team('<flag_name>', '<team_id>');
+```
+### Rows Without Overlapping Dates
+Preventing e.g. multiple concurrent reservations for a meeting room is a complicated task because of race conditions. Without pessimistic locking by the application or careful planning, simultaneous requests can create room reservations for the exact timeframe or overlapping ones. The work can be offloaded to the database with an exclusion constraint that will prevent any overlapping ranges for the same room number. This safety feature is available for integer, numeric, date and timestamp ranges. 
+```sql
+CREATE TABLE bookings (
+  room_number int,
+  reservation tstzrange,
+  EXCLUDE USING gist (room_number WITH =, reservation WITH &&)
+); 
+INSERT INTO meeting_rooms (
+    room_number, reservation
+) VALUES (
+  5, '[2022-08-20 16:00:00+00,2022-08-20 17:30:00+00]',
+  5, '[2022-08-20 17:30:00+00,2022-08-20 19:00:00+00]',
+); 
+```
+### Max per partition (50 leads, max 5 per company)
+```sql
+SELECT "lead_list_entries"."id", "rank"
+FROM (
+  SELECT *, ROW_NUMBER()
+  OVER(
+    PARTITION BY lead_list_entries.company_domain
+    ORDER BY GREATEST(
+      lead_list_entries.contacted_at,
+      lead_list_entries.exported_at,
+      '-infinity'
+    ) DESC
+  ) AS rank
+  FROM "lead_list_entries"
+) lead_list_entries
+WHERE "lead_list_entries"."rank" BETWEEN 1 AND 5
+LIMIT 50
 ```
