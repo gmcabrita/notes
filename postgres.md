@@ -32,6 +32,62 @@
 * https://github.com/AdmTal/PostgreSQL-Query-Lock-Explainer
 * https://github.com/NikolayS/postgres_dba
 ## Tricks
+### Unique hash index (via constraint)
+Caveats:
+* `ON CONFLICT` statements must explicitly name the constraint
+* [Example showing it handling collisions correctly:](https://dbfiddle.uk/NJu8GPnK)
+```sql
+CREATE TABLE demo (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  value int NOT NULL,
+  CONSTRAINT unique_value EXCLUDE USING hash(value WITH =)
+)
+
+INSERT INTO demo (value)
+  SELECT unnest(array_agg(i))
+  FROM generate_series(1,(2^16)::int4) i
+  GROUP BY hashint4(i)
+  HAVING count(*) > 1
+  LIMIT  2
+
+SELECT
+  opc.opcname AS operator_class_name,
+  amproc.amproc AS access_method_procedure
+FROM 
+  pg_class t
+  JOIN pg_index ix ON t.oid = ix.indrelid
+  JOIN pg_class i ON i.oid = ix.indexrelid
+  JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
+  JOIN pg_opclass opc ON opc.oid = ix.indclass[0]
+  JOIN pg_amproc amproc ON amproc.amprocfamily = opc.opcfamily
+WHERE 
+  i.relname = 'unique_value' AND amproc.amprocnum = 1; -- HASHSTANDARD_PROC = 1
+
+SELECT *, hashint4(value), hashint8(value) FROM demo;
+
+INSERT INTO demo (value)
+  SELECT unnest(array_agg(i))
+  FROM generate_series(1,(2^16)::int4) i
+  GROUP BY hashint4(i)
+  HAVING count(*) > 1
+  LIMIT  1
+
+INSERT INTO demo (value)
+  SELECT unnest(array_agg(i))
+  FROM generate_series(1,(2^16)::int4) i
+  GROUP BY hashint4(i)
+  HAVING count(*) > 1
+  LIMIT  1
+ON CONFLICT (value) DO NOTHING
+
+INSERT INTO demo (value)
+  SELECT unnest(array_agg(i))
+  FROM generate_series(1,(2^16)::int4) i
+  GROUP BY hashint4(i)
+  HAVING count(*) > 1
+  LIMIT  1
+ON CONFLICT ON CONSTRAINT unique_value DO NOTHING
+```
 ### Insert sample data
 ```sql
 DO $$
