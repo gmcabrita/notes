@@ -1,1 +1,1 @@
-See https://goncalo.mendescabrita.com/notes/ instead.
+Unmaintained. Check https://goncalo.mendescabrita.com/notes/ instead.
